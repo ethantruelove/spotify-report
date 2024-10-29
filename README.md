@@ -1,6 +1,27 @@
 # spotify-report
 Reporting on what you think you already know about your music habits
 
+# Quickstart
+
+### Setting up FastAPI
+
+```
+pip install requirements.txt
+python -m uvicorn src.app:app --host 0.0.0.0 --port 8080 --reload
+```
+Endpoints are locally hosted at: [localhost:8080/docs](localhost:8080/docs)
+
+For OAuth flow through to Spotify, be sure to not use the Spotify page to retrieve the initial session token. Instead, visit [localhost:8080/authorize](localhost:8080/authorize) in client/browser and then Swagger endpoints *should* work as expected.
+
+### Connecting to Spotify API
+
+- Create a project at https://developer.spotify.com/dashboard
+- Create a `.env` file wiith the following environment variables (both found in Spotify project settings):
+  - CLIENT_ID
+  - CLIENT_SECRET
+  - REDIRECT_URI (whatever you set in the Spotify App)
+  - SESSION_SECRET (a secret to use for session middleware; not important so can be weak string as long as not externally hosting this API)
+
 # Project proposal:
 
 ### Spotify API enhancements / maybe data visualizer:

@@ -1,0 +1,26 @@
+services:
+
+  website:
+    build: .
+    ports:
+      - "8080:8080"
+    depends_on:
+      - database
+    command: >
+      sh -c "cd /opt/code/ &&
+             python -m uvicorn app:app --host 0.0.0.0 --port 8080 --reload"
+
+  database:
+    image: postgres:latest
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}" ]
+      interval: 10s
+      retries: 5
+      start_period: 30s
+      timeout: 10s
+    environment:
+      - POSTGRES_SERVER=localhost
+      - POSTGRES_PORT=5432
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_DB=${POSTGRES_DB}

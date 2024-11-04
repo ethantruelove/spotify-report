@@ -1,4 +1,5 @@
 ./local_*
+local_*
 
 # Boiler plate .gitignore from https://github.com/github/gitignore/blob/main/Python.gitignore
 

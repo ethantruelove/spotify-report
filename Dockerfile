@@ -1,16 +1,18 @@
 FROM python:3.11.10-alpine
 
-WORKDIR /opt/code
+RUN apk add build-base libpq libpq-dev
 
 COPY ./requirements.txt ./requirements.txt
 
 RUN pip install -U pip
-RUN pip install -r requirements.txt
+RUN pip install -r ./requirements.txt
 
-ENV POSTGRES_USER=admin
-ENV POSTGRES_PASSWORD=admin
-ENV POSTGRES_DB=spotify
+COPY ./app /opt/app/
 
-COPY ./src ./
+COPY ./alembic /opt/alembic/
+COPY ./alembic.ini /opt/
+
+WORKDIR /opt/
 
 EXPOSE 8080
+EXPOSE 5432

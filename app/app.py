@@ -62,7 +62,11 @@ def refresh_access_token(request: Request, refresh_token: str = None):
         headers=headers,
     ).json()
 
-    access_token = res["access_token"]
+    try:
+        access_token = res["access_token"]
+    except KeyError:
+        raise HTTPException(401, f"Result: {res}")
+
     if refresh_token := res.get(refresh_token):
         request.session["refresh_token"] = refresh_token
 
@@ -137,15 +141,39 @@ def get_auth(request: Request, next_url: Optional[str] = None):
     raise HTTPException(status_code=307, detail=f"/authorize?next={next_url}")
 
 
-@app.get("/getMyPlaylists")
-def get_my_playlists(request: Request):
-    access_token = get_auth(request=request, next_url=request.url)
+def get_playlists_wrapper(
+    request: Request, access_token: str, offset: int = 0, limit: int = 50
+):
     res = requests.get(
         url=f"https://api.spotify.com/v1/me/playlists",
         headers={"Authorization": f"Bearer {access_token}"},
+        params={"limit": limit, "offset": offset},
     )
 
-    return res.json()
+    return res
+
+
+@app.get("/getMyPlaylists")
+def get_all_my_playlists(request: Request):
+    access_token = get_auth(request=request, next_url=request.url)
+
+    res = requests.get(
+        url=f"https://api.spotify.com/v1/me/playlists",
+        headers={"Authorization": f"Bearer {access_token}"},
+        params={"offset": 150, "limit": 50},
+    ).json()
+
+    if playlists := res["items"]:
+        while res["next"]:
+            time.sleep(1)
+            res = requests.get(
+                url=res["next"],
+                headers={"Authorization": f"Bearer {access_token}"},
+            ).json()
+
+            playlists.extend(res["items"])
+
+    return playlists
 
 
 @app.exception_handler(HTTPException)

@@ -1,5 +1,8 @@
+alembic
 fastapi
 gunicorn
 itsdangerous
+psycopg2
 requests
+sqlalchemy
 uvicorn[standard]

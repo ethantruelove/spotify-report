@@ -7,11 +7,6 @@ COPY ./requirements.txt ./requirements.txt
 RUN pip install -U pip
 RUN pip install -r ./requirements.txt
 
-COPY ./app /opt/app/
-
-COPY ./alembic /opt/alembic/
-COPY ./alembic.ini /opt/
-
 WORKDIR /opt/
 
 EXPOSE 8080

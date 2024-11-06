@@ -4,6 +4,10 @@ x-common-variables: &common-variables
   POSTGRES_HOST: database
   POSTGRES_PORT: ${POSTGRES_PORT:-5432}
   POSTGRES_DB: ${POSTGRES_DB:-spotify}
+  CLIENT_ID: ${CLIENT_ID}
+  CLIENT_SECRET: ${CLIENT_SECRET}
+  REDIRECT_URI: ${REDIRECT_URI:-"localhost:8080/callback"}
+  SESSION_SECRET: ${SESSION_SECRET:-"secret phrase"}
 
 services:
 
@@ -14,12 +18,21 @@ services:
     depends_on:
       database:
         condition: service_healthy
-
     command: >
       sh -c "cd /opt/ &&
              alembic upgrade head &&
              python -m uvicorn app.app:app --host 0.0.0.0 --port 8080 --reload"
     environment: *common-variables
+    volumes:
+      - type: bind
+        source: ./app/
+        target: /opt/app/
+      - type: bind
+        source: ./alembic/
+        target: /opt/alembic/
+      - type: bind
+        source: ./alembic.ini
+        target: /opt/alembic.ini
 
   database:
     image: postgres:latest
@@ -31,7 +44,7 @@ services:
       timeout: 10s
     environment:
       <<: *common-variables
-      POSTGRES_PORT: 543
+      POSTGRES_PORT: 5432
       POSTGRES_DB: spotify
     ports:
       - 5432:5432

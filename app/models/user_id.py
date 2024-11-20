@@ -1,13 +1,27 @@
-from sqlalchemy import Column, Integer, String
-from sqlalchemy.orm import relationship
+from typing import TYPE_CHECKING
+
+from pydantic import BaseModel
+from sqlalchemy import String
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models import Base
+
+if TYPE_CHECKING:
+    from app.models import Playlist
 
 
 class UserID(Base):
     __tablename__ = "user_id"
 
-    id: int = Column(Integer, autoincrement=True)
-    user_id: str = Column(String(50), primary_key=True)
+    user_id: Mapped[str] = mapped_column(String(50), primary_key=True)
 
-    playlists = relationship("Playlist", back_populates="user_id")
+    playlist: Mapped["Playlist"] = relationship(
+        "Playlist",
+        back_populates="user",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+
+
+class UserIDSchema(BaseModel):
+    user_id: str

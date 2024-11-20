@@ -1,6 +1,7 @@
 from typing import TYPE_CHECKING
 
-from sqlalchemy import ForeignKey, Identity, Integer, String
+from pydantic import BaseModel
+from sqlalchemy import ForeignKey, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models import Base
@@ -18,3 +19,8 @@ class Playlist(Base):
     )
 
     user: Mapped["UserID"] = relationship(back_populates="playlist")
+
+
+class PlaylistSchema(BaseModel):
+    spotify_id: str
+    user_id: str

@@ -7,7 +7,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.models import Base
 
 if TYPE_CHECKING:
-    from app.models import UserID
+    from app.models import Track, UserID
 
 
 class Playlist(Base):
@@ -17,8 +17,10 @@ class Playlist(Base):
     user_id: Mapped[str] = mapped_column(
         ForeignKey("user_id.user_id", ondelete="SET NULL")
     )
+    name: Mapped[str] = mapped_column(String(200))
 
     user: Mapped["UserID"] = relationship(back_populates="playlist")
+    track: Mapped["Track"] = relationship(back_populates="playlist")
 
 
 class PlaylistSchema(BaseModel):

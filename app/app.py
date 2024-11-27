@@ -1,18 +1,27 @@
+import datetime
+import logging
 import os
 import secrets
 import time
 from typing import Annotated, List, Optional
 
+import orjson
 import requests
 from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, HTTPException, Request
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.responses import (
+    HTMLResponse,
+    JSONResponse,
+    RedirectResponse,
+    StreamingResponse,
+)
 from sqlalchemy import delete
+from sqlalchemy.dialects.postgresql import insert as pginsert
 from sqlalchemy.orm import Session
 from starlette.middleware.sessions import SessionMiddleware
 
 import app.database as db
-from app.models import Playlist, PlaylistSchema, UserID
+from app.models import Album, Artist, Playlist, Track, UserID
 
 load_dotenv()
 CLIENT_ID = os.getenv("CLIENT_ID")
@@ -22,6 +31,8 @@ SESSION_SECRET = os.getenv("SESSION_SECRET")
 
 app = FastAPI()
 app.add_middleware(SessionMiddleware, secret_key=SESSION_SECRET)
+
+log = logging.getLogger("uvicorn.error")
 
 SessionDep = Annotated[Session, Depends(db.get_db)]
 
@@ -174,56 +185,215 @@ def get_playlists_wrapper(access_token: str, user: str):
     res = requests.get(
         url=f"https://api.spotify.com/v1/users/{user}/playlists",
         headers={"Authorization": f"Bearer {access_token}"},
+        params={"limit": 50},
     ).json()
 
     if playlists := res.get("items"):
         while res.get("next"):
-            time.sleep(1)
+            time.sleep(0.1)
             res = requests.get(
                 url=res["next"],
                 headers={"Authorization": f"Bearer {access_token}"},
+                params={"limit": 50},
             ).json()
-
             playlists.extend(res["items"])
 
-    return playlists
+    return [p for p in playlists if p is not None]
 
 
-def sync_playlists(request: Request, session, user: str):
-    raw_playlists = get_playlists_wrapper(
+def sync_playlists(request: Request, session: SessionDep, user: str):
+    log.info("Starting playlist sync")
+    if raw_playlists := get_playlists_wrapper(
         access_token=get_auth(request=request),
         user=user,
-    )
+    ):
+        for playlist in raw_playlists:
+            spotify_id = playlist.get("id")
+            name = playlist.get("name")
+            owner = playlist.get("owner", {})
+            user_id = owner.get("id") if isinstance(owner, dict) else None
 
-    user_db = session.query(UserID).filter_by(user_id=user).first()
-    if not user_db:
-        user_db = UserID(user_id=user)
-        session.add(user_db)
-        session.flush()
+            if spotify_id and name and user_id == user:
+                session.add(Playlist(spotify_id=spotify_id, name=name, user_id=user_id))
 
-    session.query(Playlist).filter_by(user_id=user).delete()
+        session.commit()
 
-    for playlist in raw_playlists:
-        spotify_id = playlist.get("id")
-        owner = playlist.get("owner", {})
-        user_id = owner.get("id") if isinstance(owner, dict) else None
 
-        if spotify_id and user_id == user:
-            session.add(Playlist(spotify_id=spotify_id, user_id=user_id))
+def get_tracks_wrapper(access_token: str, playlist_id: str):
+    res = requests.get(
+        url=f"https://api.spotify.com/v1/playlists/{playlist_id}/tracks",
+        headers={"Authorization": f"Bearer {access_token}"},
+        params={"limit": 50},
+    ).json()
+
+    if tracks := res.get("items"):
+        while res.get("next"):
+            time.sleep(0.1)
+            res = requests.get(
+                url=res["next"],
+                headers={"Authorization": f"Bearer {access_token}"},
+                params={"limit": 50},
+            ).json()
+
+            tracks.extend(res["items"])
+
+    return tracks
+
+
+def clean_album(album: dict):
+    precision = album.get("release_date_precision")
+    if release_date_str := album.get("release_date"):
+        if precision == "day":
+            f = "%Y-%m-%d"
+        elif precision == "month":
+            f = "%Y-%m"
+        else:
+            f = "%Y"
+
+        try:
+            release_date = datetime.datetime.strptime(release_date_str, f)
+        except ValueError:
+            release_date = None
+    else:
+        release_date = None
+
+    return {
+        "spotify_id": album.get("id"),
+        "artist_id": album.get("artist_id"),
+        "name": album.get("name"),
+        "release_date": release_date,
+    }
+
+
+def sync_albums(session: SessionDep, albums: List[dict]):
+    seen_albums = set()
+    cleaned_albums = []
+    for album in albums:
+        album_id = album.get("id")
+        if album_id not in seen_albums:
+            album_name = album.get("name")
+            log.info(f"Adding album {album_name} by {album_name} with id {album_id}")
+            seen_albums.add(album_id)
+            cleaned_albums.append(clean_album(album))
+
+    stmt = pginsert(Album).values(cleaned_albums).on_conflict_do_nothing()
+    session.execute(stmt)
+    session.flush()
+
+
+def sync_artists(session: SessionDep, artists: List[dict]):
+    seen_artists = set()
+    deduped_artists = []
+    for artist in artists:
+        artist_id = artist.get("id")
+        if artist_id not in seen_artists:
+            artist_name = artist.get("name")
+            log.info(f"Adding artist {artist_name} with id {artist_id}")
+            seen_artists.add(artist_id)
+            deduped_artists.append({"spotify_id": artist_id, "name": artist_name})
+
+    stmt = pginsert(Artist).values(deduped_artists).on_conflict_do_nothing()
+    session.execute(stmt)
+    session.flush()
+
+
+def sync_tracks(request: Request, session: SessionDep, user: str = None):
+    log.info("Starting tracks sync")
+    artists = []
+    albums = []
+    tracks = []
+    for playlist in session.query(Playlist).filter_by(user_id=user).all():
+        log.info(f"Getting track data for playlist: {playlist.name}")
+        if raw_tracks := get_tracks_wrapper(
+            access_token=get_auth(request=request), playlist_id=playlist.spotify_id
+        ):
+            no_local_tracks = [
+                t.get("track") for t in raw_tracks if t.get("is_local") is False
+            ]
+
+            artists.extend([t.get("artists")[0] for t in no_local_tracks])
+            # we need to use the artist_id from the track, not from the album
+            albums.extend(
+                [
+                    {"artist_id": t.get("artists")[0].get("id"), **t.get("album")}
+                    for t in no_local_tracks
+                ]
+            )
+
+            tracks.extend(
+                [
+                    Track(
+                        spotify_id=t.get("id"),
+                        playlist_id=playlist.spotify_id,
+                        album_id=t.get("album").get("id"),
+                        # only takes first artist
+                        artist_id=t.get("artists")[0].get("id"),
+                        name=t.get("name"),
+                    )
+                    for t in no_local_tracks
+                ]
+            )
+
+    sync_artists(session=session, artists=artists)
+    sync_albums(session=session, albums=albums)
+    session.add_all(tracks)
 
     session.commit()
 
 
-@app.get("/sync")
-def sync(request: Request, session: SessionDep, user: str = None):
+def clean_tables(session: SessionDep, user: str):
+    log.info("Cleaning tables")
+    session.query(Playlist).filter_by(user_id=user).delete()
+    session.commit()
+
+
+def add_or_get_user(request: Request, session: SessionDep, user: str = None):
+    log.info("Getting user")
     if not user:
         user = get_user_id(
             request=request, session=session, access_token=get_auth(request=request)
         )
 
+    user_id = session.query(UserID).filter_by(user_id=user).first()
+    if not user_id:
+        user_id = UserID(user_id=user)
+        session.add(user_id)
+        session.flush()
+
+    return user_id.user_id
+
+
+@app.get("/sync")
+def sync(request: Request, session: SessionDep, user: str = None):
+    user = add_or_get_user(request=request, session=session, user=user)
+    clean_tables(session=session, user=user)
+
     sync_playlists(request=request, session=session, user=user)
+    sync_tracks(request=request, session=session, user=user)
 
     return "successfully synced"
+
+
+@app.get("/getTracksFromPlaylistDB")
+def get_tracks_db(session: SessionDep, playlist_id: str):
+    tracks = session.query(Track).filter(Track.playlist_id == playlist_id).all()
+    return StreamingResponse(
+        iter(
+            [
+                orjson.dumps(
+                    [t.to_dict() for t in tracks],
+                    option=orjson.OPT_INDENT_2,
+                )
+            ]
+        ),
+        media_type="application/json",
+    )
+
+
+@app.get("/test")
+def func_test(request: Request, session: SessionDep):
+    session.query(UserID).filter(UserID.user_id == "drfriday13th").delete()
+    session.commit()
 
 
 @app.get("/debug")

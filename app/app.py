@@ -190,7 +190,7 @@ def get_playlists_wrapper(access_token: str, user: str):
 
     if playlists := res.get("items"):
         while res.get("next"):
-            time.sleep(0.25)
+            time.sleep(0.1)
             res = requests.get(
                 url=res["next"],
                 headers={"Authorization": f"Bearer {access_token}"},
@@ -228,7 +228,7 @@ def get_tracks_wrapper(access_token: str, playlist_id: str):
 
     if tracks := res.get("items"):
         while res.get("next"):
-            time.sleep(0.25)
+            time.sleep(0.1)
             res = requests.get(
                 url=res["next"],
                 headers={"Authorization": f"Bearer {access_token}"},
@@ -266,14 +266,13 @@ def clean_album(album: dict):
 
 
 def sync_albums(session: SessionDep, albums: List[dict]):
-    # log.info(
-    #     f"Adding album {album.get('name')} by {artist} with id {album.get('artists')[0].get('id')}"
-    # )
     seen_albums = set()
     cleaned_albums = []
     for album in albums:
         album_id = album.get("id")
         if album_id not in seen_albums:
+            album_name = album.get("name")
+            log.info(f"Adding album {album_name} by {album_name} with id {album_id}")
             seen_albums.add(album_id)
             cleaned_albums.append(clean_album(album))
 
@@ -283,17 +282,15 @@ def sync_albums(session: SessionDep, albums: List[dict]):
 
 
 def sync_artists(session: SessionDep, artists: List[dict]):
-    log.info(f"Adding artist {[artist.get('name') for artist in artists]}")
-
     seen_artists = set()
     deduped_artists = []
     for artist in artists:
         artist_id = artist.get("id")
         if artist_id not in seen_artists:
+            artist_name = artist.get("name")
+            log.info(f"Adding artist {artist_name} with id {artist_id}")
             seen_artists.add(artist_id)
-            deduped_artists.append(
-                {"spotify_id": artist.get("id"), "name": artist.get("name")}
-            )
+            deduped_artists.append({"spotify_id": artist_id, "name": artist_name})
 
     stmt = pginsert(Artist).values(deduped_artists).on_conflict_do_nothing()
     session.execute(stmt)
@@ -302,43 +299,44 @@ def sync_artists(session: SessionDep, artists: List[dict]):
 
 def sync_tracks(request: Request, session: SessionDep, user: str = None):
     log.info("Starting tracks sync")
+    artists = []
+    albums = []
+    tracks = []
     for playlist in session.query(Playlist).filter_by(user_id=user).all():
-        if not playlist.name.startswith("arXiv"):
-            log.info(f"Syncing tracks for playlist: {playlist.name}")
-            if raw_tracks := get_tracks_wrapper(
-                access_token=get_auth(request=request), playlist_id=playlist.spotify_id
-            ):
-                no_local_tracks = [
-                    t.get("track") for t in raw_tracks if t.get("is_local") is False
+        log.info(f"Getting track data for playlist: {playlist.name}")
+        if raw_tracks := get_tracks_wrapper(
+            access_token=get_auth(request=request), playlist_id=playlist.spotify_id
+        ):
+            no_local_tracks = [
+                t.get("track") for t in raw_tracks if t.get("is_local") is False
+            ]
+
+            artists.extend([t.get("artists")[0] for t in no_local_tracks])
+            # we need to use the artist_id from the track, not from the album
+            albums.extend(
+                [
+                    {"artist_id": t.get("artists")[0].get("id"), **t.get("album")}
+                    for t in no_local_tracks
                 ]
+            )
 
-                sync_artists(
-                    session=session,
-                    artists=[t.get("artists")[0] for t in no_local_tracks],
-                )
+            tracks.extend(
+                [
+                    Track(
+                        spotify_id=t.get("id"),
+                        playlist_id=playlist.spotify_id,
+                        album_id=t.get("album").get("id"),
+                        # only takes first artist
+                        artist_id=t.get("artists")[0].get("id"),
+                        name=t.get("name"),
+                    )
+                    for t in no_local_tracks
+                ]
+            )
 
-                sync_albums(
-                    session=session,
-                    # we need to use the artist_id from the track, not from the album
-                    albums=[
-                        {"artist_id": t.get("artists")[0].get("id"), **t.get("album")}
-                        for t in no_local_tracks
-                    ],
-                )
-
-                session.add_all(
-                    [
-                        Track(
-                            spotify_id=t.get("id"),
-                            playlist_id=playlist.spotify_id,
-                            album_id=t.get("album").get("id"),
-                            # only takes first artist
-                            artist_id=t.get("artists")[0].get("id"),
-                            name=t.get("name"),
-                        )
-                        for t in no_local_tracks
-                    ]
-                )
+    sync_artists(session=session, artists=artists)
+    sync_albums(session=session, albums=albums)
+    session.add_all(tracks)
 
     session.commit()
 
@@ -346,11 +344,6 @@ def sync_tracks(request: Request, session: SessionDep, user: str = None):
 def clean_tables(session: SessionDep, user: str):
     log.info("Cleaning tables")
     session.query(Playlist).filter_by(user_id=user).delete()
-    # session.query(Track).filter(
-    #     Track.playlist_id.in_([p.spotify_id for p in playlists.all()])
-    # ).delete()
-    # playlists.delete()
-
     session.commit()
 
 

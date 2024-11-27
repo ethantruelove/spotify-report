@@ -1,19 +1,26 @@
+import json
 import logging
 import os
 import secrets
 import time
 from typing import Annotated, List, Optional
 
+import orjson
 import requests
 from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, HTTPException, Request
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.responses import (
+    HTMLResponse,
+    JSONResponse,
+    RedirectResponse,
+    StreamingResponse,
+)
 from sqlalchemy import delete
 from sqlalchemy.orm import Session
 from starlette.middleware.sessions import SessionMiddleware
 
 import app.database as db
-from app.models import Playlist, PlaylistSchema, Track, UserID
+from app.models import Playlist, Track, UserID
 
 load_dotenv()
 CLIENT_ID = os.getenv("CLIENT_ID")
@@ -24,7 +31,7 @@ SESSION_SECRET = os.getenv("SESSION_SECRET")
 app = FastAPI()
 app.add_middleware(SessionMiddleware, secret_key=SESSION_SECRET)
 
-log = logging.getLogger(__name__)
+log = logging.getLogger("uvicorn.error")
 
 SessionDep = Annotated[Session, Depends(db.get_db)]
 
@@ -233,7 +240,6 @@ def get_tracks_wrapper(access_token: str, playlist_id: str):
     return tracks
 
 
-@app.get("/playlistsDB")
 def sync_tracks(request: Request, session: SessionDep, user: str = None):
     log.info("Starting tracks sync")
     for playlist in session.query(Playlist).filter_by(user_id=user).all():
@@ -295,6 +301,22 @@ def sync(request: Request, session: SessionDep, user: str = None):
     sync_tracks(request=request, session=session, user=user)
 
     return "successfully synced"
+
+
+@app.get("/getTracksFromPlaylistDB")
+def get_tracks_db(session: SessionDep, playlist_id: str):
+    tracks = session.query(Track).filter(Track.playlist_id == playlist_id).all()
+    return StreamingResponse(
+        iter(
+            [
+                orjson.dumps(
+                    [t.to_dict() for t in tracks],
+                    option=orjson.OPT_INDENT_2,
+                )
+            ]
+        ),
+        media_type="application/json",
+    )
 
 
 @app.get("/debug")

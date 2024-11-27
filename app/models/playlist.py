@@ -15,12 +15,14 @@ class Playlist(Base):
 
     spotify_id: Mapped[str] = mapped_column(String(50), primary_key=True)
     user_id: Mapped[str] = mapped_column(
-        ForeignKey("user_id.user_id", ondelete="SET NULL")
+        ForeignKey("user_id.user_id", ondelete="CASCADE")
     )
     name: Mapped[str] = mapped_column(String(200))
 
     user: Mapped["UserID"] = relationship(back_populates="playlist")
-    track: Mapped["Track"] = relationship(back_populates="playlist")
+    track: Mapped["Track"] = relationship(
+        back_populates="playlist", cascade="all, delete-orphan"
+    )
 
 
 class PlaylistSchema(BaseModel):

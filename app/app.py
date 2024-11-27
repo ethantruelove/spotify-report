@@ -1,4 +1,4 @@
-import json
+import datetime
 import logging
 import os
 import secrets
@@ -16,11 +16,12 @@ from fastapi.responses import (
     StreamingResponse,
 )
 from sqlalchemy import delete
+from sqlalchemy.dialects.postgresql import insert as pginsert
 from sqlalchemy.orm import Session
 from starlette.middleware.sessions import SessionMiddleware
 
 import app.database as db
-from app.models import Playlist, Track, UserID
+from app.models import Album, Artist, Playlist, Track, UserID
 
 load_dotenv()
 CLIENT_ID = os.getenv("CLIENT_ID")
@@ -195,10 +196,9 @@ def get_playlists_wrapper(access_token: str, user: str):
                 headers={"Authorization": f"Bearer {access_token}"},
                 params={"limit": 50},
             ).json()
-
             playlists.extend(res["items"])
 
-    return playlists
+    return [p for p in playlists if p is not None]
 
 
 def sync_playlists(request: Request, session: SessionDep, user: str):
@@ -240,38 +240,116 @@ def get_tracks_wrapper(access_token: str, playlist_id: str):
     return tracks
 
 
+def clean_album(album: dict):
+    precision = album.get("release_date_precision")
+    if release_date_str := album.get("release_date"):
+        if precision == "day":
+            f = "%Y-%m-%d"
+        elif precision == "month":
+            f = "%Y-%m"
+        else:
+            f = "%Y"
+
+        try:
+            release_date = datetime.datetime.strptime(release_date_str, f)
+        except ValueError:
+            release_date = None
+    else:
+        release_date = None
+
+    return {
+        "spotify_id": album.get("id"),
+        "artist_id": album.get("artist_id"),
+        "name": album.get("name"),
+        "release_date": release_date,
+    }
+
+
+def sync_albums(session: SessionDep, albums: List[dict]):
+    # log.info(
+    #     f"Adding album {album.get('name')} by {artist} with id {album.get('artists')[0].get('id')}"
+    # )
+    seen_albums = set()
+    cleaned_albums = []
+    for album in albums:
+        album_id = album.get("id")
+        if album_id not in seen_albums:
+            seen_albums.add(album_id)
+            cleaned_albums.append(clean_album(album))
+
+    stmt = pginsert(Album).values(cleaned_albums).on_conflict_do_nothing()
+    session.execute(stmt)
+    session.flush()
+
+
+def sync_artists(session: SessionDep, artists: List[dict]):
+    log.info(f"Adding artist {[artist.get('name') for artist in artists]}")
+
+    seen_artists = set()
+    deduped_artists = []
+    for artist in artists:
+        artist_id = artist.get("id")
+        if artist_id not in seen_artists:
+            seen_artists.add(artist_id)
+            deduped_artists.append(
+                {"spotify_id": artist.get("id"), "name": artist.get("name")}
+            )
+
+    stmt = pginsert(Artist).values(deduped_artists).on_conflict_do_nothing()
+    session.execute(stmt)
+    session.flush()
+
+
 def sync_tracks(request: Request, session: SessionDep, user: str = None):
     log.info("Starting tracks sync")
     for playlist in session.query(Playlist).filter_by(user_id=user).all():
-        log.debug(f"Syncing tracks for playlist: {playlist.name}")
-        if raw_tracks := get_tracks_wrapper(
-            access_token=get_auth(request=request), playlist_id=playlist.spotify_id
-        ):
-            session.add_all(
-                [
-                    Track(
-                        spotify_id=t.get("track").get("id"),
-                        playlist_id=playlist.spotify_id,
-                        album_id=t.get("track").get("album").get("id"),
-                        # only takes first artist
-                        artist_id=t.get("track").get("artists")[0].get("id"),
-                        name=t.get("track").get("name"),
-                    )
-                    for t in raw_tracks
-                    if t.get("is_local") is False
+        if not playlist.name.startswith("arXiv"):
+            log.info(f"Syncing tracks for playlist: {playlist.name}")
+            if raw_tracks := get_tracks_wrapper(
+                access_token=get_auth(request=request), playlist_id=playlist.spotify_id
+            ):
+                no_local_tracks = [
+                    t.get("track") for t in raw_tracks if t.get("is_local") is False
                 ]
-            )
+
+                sync_artists(
+                    session=session,
+                    artists=[t.get("artists")[0] for t in no_local_tracks],
+                )
+
+                sync_albums(
+                    session=session,
+                    # we need to use the artist_id from the track, not from the album
+                    albums=[
+                        {"artist_id": t.get("artists")[0].get("id"), **t.get("album")}
+                        for t in no_local_tracks
+                    ],
+                )
+
+                session.add_all(
+                    [
+                        Track(
+                            spotify_id=t.get("id"),
+                            playlist_id=playlist.spotify_id,
+                            album_id=t.get("album").get("id"),
+                            # only takes first artist
+                            artist_id=t.get("artists")[0].get("id"),
+                            name=t.get("name"),
+                        )
+                        for t in no_local_tracks
+                    ]
+                )
 
     session.commit()
 
 
 def clean_tables(session: SessionDep, user: str):
     log.info("Cleaning tables")
-    playlists = session.query(Playlist).filter_by(user_id=user)
-    session.query(Track).filter(
-        Track.playlist_id.in_([p.spotify_id for p in playlists.all()])
-    ).delete()
-    playlists.delete()
+    session.query(Playlist).filter_by(user_id=user).delete()
+    # session.query(Track).filter(
+    #     Track.playlist_id.in_([p.spotify_id for p in playlists.all()])
+    # ).delete()
+    # playlists.delete()
 
     session.commit()
 
@@ -317,6 +395,12 @@ def get_tracks_db(session: SessionDep, playlist_id: str):
         ),
         media_type="application/json",
     )
+
+
+@app.get("/test")
+def func_test(request: Request, session: SessionDep):
+    session.query(UserID).filter(UserID.user_id == "drfriday13th").delete()
+    session.commit()
 
 
 @app.get("/debug")

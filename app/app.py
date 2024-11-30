@@ -216,7 +216,7 @@ def sync_playlists(request: Request, session: SessionDep, user: str):
             if spotify_id and name and user_id == user:
                 session.add(Playlist(spotify_id=spotify_id, name=name, user_id=user_id))
 
-        session.commit()
+        session.flush()
 
 
 def get_tracks_wrapper(access_token: str, playlist_id: str):
@@ -344,7 +344,7 @@ def sync_tracks(request: Request, session: SessionDep, user: str = None):
 def clean_tables(session: SessionDep, user: str):
     log.info("Cleaning tables")
     session.query(Playlist).filter_by(user_id=user).delete()
-    session.commit()
+    session.flush()
 
 
 def add_or_get_user(request: Request, session: SessionDep, user: str = None):

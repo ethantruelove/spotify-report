@@ -28,6 +28,9 @@ services:
         source: ./app/
         target: /opt/app/
       - type: bind
+        source: ./tests/
+        target: /opt/tests/
+      - type: bind
         source: ./alembic/
         target: /opt/alembic/
       - type: bind

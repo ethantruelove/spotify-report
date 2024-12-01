@@ -27,7 +27,7 @@ class Album(Base):
 
     def __repr__(self):
         return (
-            f"<Album spotify_id={self.spotify_id} artist_id:{self.artist_id} "
+            f"<Album spotify_id={self.spotify_id} artist_id={self.artist_id} "
             f"name={self.name} release_date={self.release_date}>"
         )
 

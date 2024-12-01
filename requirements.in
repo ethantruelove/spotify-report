@@ -4,6 +4,8 @@ gunicorn
 itsdangerous
 orjson
 psycopg2
+pytest
+pytest-cov
 matplotlib
 requests
 sqlalchemy

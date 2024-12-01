@@ -8,20 +8,21 @@ from typing import Annotated, List, Optional
 import orjson
 import requests
 from dotenv import load_dotenv
-from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Request, Response
 from fastapi.responses import (
     HTMLResponse,
     JSONResponse,
     RedirectResponse,
     StreamingResponse,
 )
-from sqlalchemy import delete
+from sqlalchemy import delete, desc, func
 from sqlalchemy.dialects.postgresql import insert as pginsert
 from sqlalchemy.orm import Session
 from starlette.middleware.sessions import SessionMiddleware
 
 import app.database as db
 from app.models import Album, Artist, Playlist, Track, UserID
+from app.visualizer import MediaType, freq
 
 load_dotenv()
 CLIENT_ID = os.getenv("CLIENT_ID")
@@ -216,7 +217,7 @@ def sync_playlists(request: Request, session: SessionDep, user: str):
             if spotify_id and name and user_id == user:
                 session.add(Playlist(spotify_id=spotify_id, name=name, user_id=user_id))
 
-        session.commit()
+        session.flush()
 
 
 def get_tracks_wrapper(access_token: str, playlist_id: str):
@@ -344,7 +345,7 @@ def sync_tracks(request: Request, session: SessionDep, user: str = None):
 def clean_tables(session: SessionDep, user: str):
     log.info("Cleaning tables")
     session.query(Playlist).filter_by(user_id=user).delete()
-    session.commit()
+    session.flush()
 
 
 def add_or_get_user(request: Request, session: SessionDep, user: str = None):
@@ -388,6 +389,62 @@ def get_tracks_db(session: SessionDep, playlist_id: str):
         ),
         media_type="application/json",
     )
+
+
+@app.get("/getFrequent")
+def get_frequent(
+    request: Request,
+    session: SessionDep,
+    background_tasks: BackgroundTasks,
+    user: str = None,
+    media_type: MediaType = MediaType.tracks,
+    top: int = 10,
+):
+    user = add_or_get_user(request=request, session=session, user=user)
+
+    if media_type == MediaType.tracks:
+        sub_query = (
+            session.query(Track.spotify_id, func.count(Track.spotify_id).label("freq"))
+            .group_by(Track.spotify_id)
+            .order_by(desc("freq"))
+            .limit(top)
+            .subquery()
+        )
+
+        data = session.query(Track.name, sub_query.c.freq).join(
+            sub_query, Track.spotify_id == sub_query.c.spotify_id
+        )
+    elif media_type == MediaType.artists:
+        sub_query = (
+            session.query(Track.artist_id, func.count(Track.artist_id).label("freq"))
+            .group_by(Track.artist_id)
+            .order_by(desc("freq"))
+            .limit(top)
+            .subquery()
+        )
+
+        data = session.query(Artist.name, sub_query.c.freq).join(
+            sub_query, Artist.spotify_id == sub_query.c.artist_id
+        )
+    else:
+        sub_query = (
+            session.query(Track.album_id, func.count(Track.album_id).label("freq"))
+            .group_by(Track.album_id)
+            .order_by(desc("freq"))
+            .limit(top)
+            .subquery()
+        )
+
+        data = session.query(Album.name, sub_query.c.freq).join(
+            sub_query, Album.spotify_id == sub_query.c.album_id
+        )
+
+    # https://stackoverflow.com/questions/73754664/how-to-display-a-matplotlib-chart-with-fastapi-nextjs-without-saving-the-chart
+    img_buf = freq(data.order_by(sub_query.c.freq.desc()).all())
+    background_tasks.add_task(img_buf.close)
+    headers = {"Content-Disposition": 'inline; filename="out.png"'}
+
+    return Response(img_buf.getvalue(), headers=headers, media_type="image/png")
 
 
 @app.get("/test")

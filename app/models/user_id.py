@@ -22,6 +22,12 @@ class UserID(Base):
         passive_deletes=True,
     )
 
+    def to_dict(self):
+        return {"user_id": self.user_id}
+
+    def __repr__(self):
+        return f"<UserID user_id={self.user_id}>"
+
 
 class UserIDSchema(BaseModel):
     user_id: str

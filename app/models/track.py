@@ -42,8 +42,8 @@ class Track(Base):
 
     def __repr__(self):
         return (
-            f"<Track id={self.id} spotify_id={self.spotify_id} playlist_id={self.playlist_id}"
-            f"album_id={self.album_id} artist_id={self.artist_id} name={self.name}>"
+            f"<Track id={self.id} spotify_id={self.spotify_id} playlist_id={self.playlist_id} "
+            f"artist_id={self.artist_id} album_id={self.album_id} name={self.name}>"
         )
 
 

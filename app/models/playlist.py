@@ -24,6 +24,16 @@ class Playlist(Base):
         back_populates="playlist", cascade="all, delete-orphan"
     )
 
+    def __repr__(self):
+        return f"<Playlist spotify_id={self.spotify_id} user_id={self.user_id} name={self.name}>"
+
+    def to_dict(self):
+        return {
+            "spotify_id": self.spotify_id,
+            "user_id": self.user_id,
+            "name": self.name,
+        }
+
 
 class PlaylistSchema(BaseModel):
     spotify_id: str

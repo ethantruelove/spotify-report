@@ -4,6 +4,7 @@ gunicorn
 itsdangerous
 orjson
 psycopg2
+matplotlib
 requests
 sqlalchemy
 uvicorn[standard]

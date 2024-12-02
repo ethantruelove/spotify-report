@@ -158,7 +158,7 @@ def get_auth(request: Request):
         return refresh_access_token(request=request, refresh_token=refresh_token)
 
     # TODO: this scenario is not well handled, easiest fix is to manually go to
-    # localhost:8080/authorize, but shouldn't need to do that more than every 60 day or so
+    # localhost:8080/authorize every 1 hour
     return request.session.get("access_token")
 
 

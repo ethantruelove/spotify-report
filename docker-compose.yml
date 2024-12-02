@@ -36,6 +36,9 @@ services:
       - type: bind
         source: ./alembic.ini
         target: /opt/alembic.ini
+      - type: bind
+        source: ./.coveragerc
+        target: /opt/.coveragerc
 
   database:
     image: postgres:latest

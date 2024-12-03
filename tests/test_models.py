@@ -4,6 +4,7 @@ from unittest import TestCase
 from app import models
 
 case = TestCase()
+case.maxDiff = None
 
 
 def test_album_repr():

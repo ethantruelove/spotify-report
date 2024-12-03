@@ -28,6 +28,8 @@ fastapi==0.115.4
     # via -r requirements.in
 fonttools==4.55.0
     # via matplotlib
+freezegun==1.5.1
+    # via -r requirements.in
 gunicorn==23.0.0
     # via -r requirements.in
 h11==0.14.0
@@ -80,7 +82,9 @@ pytest==8.3.4
 pytest-cov==6.0.0
     # via -r requirements.in
 python-dateutil==2.9.0.post0
-    # via matplotlib
+    # via
+    #   freezegun
+    #   matplotlib
 python-dotenv==1.0.1
     # via uvicorn
 pyyaml==6.0.2

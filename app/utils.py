@@ -12,7 +12,6 @@ from sqlalchemy.orm import Session
 
 import app.database as db
 from app.models import Album, Artist, Playlist, Track, UserID
-from app.visualizer import MediaType
 
 load_dotenv()
 CLIENT_ID = os.getenv("CLIENT_ID")
@@ -49,10 +48,14 @@ def refresh_access_token(
     ).json()
 
     if access_token := res.get("access_token"):
-        if refresh_token := res.get(refresh_token):
+        if refresh_token := res.get("refresh_token"):
             request.session["refresh_token"] = refresh_token
 
-        request.session["expiration_time"] = int(res.get("expires_in")) + time.time()
+        # add 30 second buffer in case of mistiming
+        request.session["expiration_time"] = (
+            int(res.get("expires_in")) + time.time() - 30
+        )
+        request.session["access_token"] = access_token
         return access_token
 
 
@@ -63,11 +66,14 @@ def get_auth(request: Request):
                 return access_token
 
     if refresh_token := request.session.get("refresh_token"):
-        return refresh_access_token(request=request, refresh_token=refresh_token)
+        if access_token := refresh_access_token(
+            request=request, refresh_token=refresh_token
+        ):
+            return access_token
 
     # TODO: this scenario is not well handled, easiest fix is to manually go to
     # localhost:8080/authorize every 1 hour
-    return request.session.get("access_token")
+    raise ValueError("Please call /authorize to generate new tokens")
 
 
 def get_user_id(request: Request, session: SessionDep, access_token: str = None):
@@ -95,8 +101,7 @@ def get_playlists_wrapper(access_token: str, user: str):
     ).json()
 
     if playlists := res.get("items"):
-        # TODO remove and False
-        while res.get("next") and False:
+        while res.get("next"):
             time.sleep(0.1)
             res = requests.get(
                 url=res["next"],
@@ -105,7 +110,7 @@ def get_playlists_wrapper(access_token: str, user: str):
             ).json()
             playlists.extend(res["items"])
 
-    return [p for p in playlists if p is not None]
+    return [p for p in playlists if p is not None] if playlists is not None else []
 
 
 def sync_playlists(request: Request, session: SessionDep, user: str):
@@ -115,13 +120,15 @@ def sync_playlists(request: Request, session: SessionDep, user: str):
         user=user,
     ):
         for playlist in raw_playlists:
-            spotify_id = playlist.get("id")
-            name = playlist.get("name")
-            owner = playlist.get("owner", {})
-            user_id = owner.get("id") if isinstance(owner, dict) else None
-
-            if spotify_id and name and user_id == user:
-                session.add(Playlist(spotify_id=spotify_id, name=name, user_id=user_id))
+            user_id = playlist.get("owner").get("id")
+            if user_id == user:
+                session.add(
+                    Playlist(
+                        spotify_id=playlist.get("id"),
+                        name=playlist.get("name"),
+                        user_id=user_id,
+                    )
+                )
 
         session.flush()
 
@@ -144,7 +151,7 @@ def get_tracks_wrapper(access_token: str, playlist_id: str):
 
             tracks.extend(res["items"])
 
-    return tracks
+    return [t for t in tracks if t is not None] if tracks is not None else []
 
 
 def clean_album(album: dict):
@@ -158,7 +165,7 @@ def clean_album(album: dict):
             f = "%Y"
 
         try:
-            release_date = datetime.datetime.strptime(release_date_str, f)
+            release_date = datetime.datetime.strptime(release_date_str, f).date()
         except ValueError:
             release_date = None
     else:
@@ -183,9 +190,12 @@ def sync_albums(session: SessionDep, albums: List[dict]):
             seen_albums.add(album_id)
             cleaned_albums.append(clean_album(album))
 
-    stmt = pginsert(Album).values(cleaned_albums).on_conflict_do_nothing()
-    session.execute(stmt)
-    session.flush()
+    print(cleaned_albums)
+    print(bool(cleaned_albums))
+    if cleaned_albums:
+        stmt = pginsert(Album).values(cleaned_albums).on_conflict_do_nothing()
+        session.execute(stmt)
+        session.flush()
 
 
 def sync_artists(session: SessionDep, artists: List[dict]):
@@ -199,9 +209,10 @@ def sync_artists(session: SessionDep, artists: List[dict]):
             seen_artists.add(artist_id)
             deduped_artists.append({"spotify_id": artist_id, "name": artist_name})
 
-    stmt = pginsert(Artist).values(deduped_artists).on_conflict_do_nothing()
-    session.execute(stmt)
-    session.flush()
+    if deduped_artists:
+        stmt = pginsert(Artist).values(deduped_artists).on_conflict_do_nothing()
+        session.execute(stmt)
+        session.flush()
 
 
 def sync_tracks(request: Request, session: SessionDep, user: str = None):
@@ -209,8 +220,7 @@ def sync_tracks(request: Request, session: SessionDep, user: str = None):
     artists = []
     albums = []
     tracks = []
-    # TODO: remove slice
-    for playlist in session.query(Playlist).filter_by(user_id=user).all()[:2]:
+    for playlist in session.query(Playlist).filter_by(user_id=user).all():
         log.info(f"Getting track data for playlist: {playlist.name}")
         if raw_tracks := get_tracks_wrapper(
             access_token=get_auth(request=request), playlist_id=playlist.spotify_id

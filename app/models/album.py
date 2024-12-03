@@ -1,4 +1,5 @@
 import datetime
+from typing import Self
 
 from pydantic import BaseModel
 from sqlalchemy import Date, ForeignKey, String
@@ -29,6 +30,14 @@ class Album(Base):
         return (
             f"<Album spotify_id={self.spotify_id} artist_id={self.artist_id} "
             f"name={self.name} release_date={self.release_date}>"
+        )
+
+    def __eq__(self, album: Self):
+        return (
+            self.spotify_id == album.spotify_id
+            and self.artist_id == album.artist_id
+            and self.name == album.name
+            and self.release_date == album.release_date
         )
 
 

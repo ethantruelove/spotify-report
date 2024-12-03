@@ -1,7 +1,7 @@
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Self
 
 from pydantic import BaseModel
-from sqlalchemy import ForeignKey, Identity, Integer, String, Table
+from sqlalchemy import ForeignKey, Identity, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models import Base
@@ -44,6 +44,16 @@ class Track(Base):
         return (
             f"<Track id={self.id} spotify_id={self.spotify_id} playlist_id={self.playlist_id} "
             f"artist_id={self.artist_id} album_id={self.album_id} name={self.name}>"
+        )
+
+    def __eq__(self, track: Self):
+        return (
+            self.id == track.id
+            and self.spotify_id == track.spotify_id
+            and self.playlist_id == track.playlist_id
+            and self.artist_id == track.artist_id
+            and self.album_id == track.album_id
+            and self.name == track.name
         )
 
 

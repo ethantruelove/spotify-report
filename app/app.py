@@ -8,7 +8,12 @@ import orjson
 import requests
 from dotenv import load_dotenv
 from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Request, Response
-from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
+from fastapi.responses import (
+    HTMLResponse,
+    JSONResponse,
+    RedirectResponse,
+    StreamingResponse,
+)
 from sqlalchemy import desc, func
 from sqlalchemy.orm import Session
 from starlette.middleware.sessions import SessionMiddleware
@@ -91,22 +96,30 @@ def callback(
 ):
     stored_state = request.session.get("state")
     if error:
-        return HTMLResponse(f"Failed due to {error}")
+        raise HTTPException(detail=f'Failed due to "{error}"', status_code=401)
 
-    if code and state == stored_state:
-        next_url = state[state.index(":") + 1 :]
-        next_url = next_url if next_url != "" else "/docs"
+    if code:
+        if state == stored_state:
+            next_url = state[state.index(":") + 1 :]
+            next_url = next_url if next_url != "" else "/docs"
 
-        res = get_access_token(request=request, code=code, next_url=next_url)
+            res = get_access_token(code=code)
 
-        request.session["access_token"] = res["access_token"]
-        request.session["expiration_time"] = int(res.get("expires_in")) + time.time()
-        if refresh_token := res.get("refresh_token"):
-            request.session["refresh_token"] = refresh_token
+            request.session["access_tokens"] = res["access_token"]
+            request.session["expiration_time"] = (
+                int(res.get("expires_in")) + time.time()
+            )
+            if refresh_token := res.get("refresh_token"):
+                request.session["refresh_token"] = refresh_token
 
-        return RedirectResponse(url=next_url)
-
-    return HTMLResponse(f"State mismatch! expected {stored_state} but got {state}")
+            return RedirectResponse(url=next_url)
+        raise HTTPException(
+            detail=f"State mismatch! Expected {stored_state} but got {state}",
+            status_code=401,
+        )
+    raise HTTPException(
+        detail=f"Failed to receive code from Spotify; please try again", status_code=401
+    )
 
 
 @app.get("/sync")
@@ -117,7 +130,7 @@ def sync(request: Request, session: SessionDep, user: str = None):
     utils.sync_playlists(request=request, session=session, user=user)
     utils.sync_tracks(request=request, session=session, user=user)
 
-    return "successfully synced"
+    return HTMLResponse("Successfully synced", status_code=200)
 
 
 @app.get("/getTracksFromPlaylistDB")
@@ -204,13 +217,10 @@ def debug(request: Request):
         "expiration_time": datetime.fromtimestamp(
             int(expiration_time[: expiration_time.index(".")])
         ),
-        "expired": request.session.get("expiration_time") < time.time(),
+        "expired": float(request.session.get("expiration_time")) < time.time(),
     }
 
 
 @app.exception_handler(HTTPException)
-def http_exception_handler(exception: HTTPException):
-    if exception.status_code == 307:
-        return RedirectResponse(url="/authorize")
-
-    return {"detail": exception.detail}
+def http_exception_handler(request: Request, exception: HTTPException):
+    return JSONResponse({"detail": exception.detail}, status_code=exception.status_code)

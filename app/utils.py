@@ -1,9 +1,11 @@
+import base64
 import datetime
 import logging
 import os
 import time
 from typing import Annotated, List
 
+import itsdangerous
 import requests
 from dotenv import load_dotenv
 from fastapi import Depends, Request
@@ -16,6 +18,7 @@ from app.models import Album, Artist, Playlist, Track, UserID
 load_dotenv()
 CLIENT_ID = os.getenv("CLIENT_ID")
 CLIENT_SECRET = os.getenv("CLIENT_SECRET")
+SESSION_SECRET = os.getenv("SESSION_SECRET")
 
 log = logging.getLogger("uvicorn.error")
 

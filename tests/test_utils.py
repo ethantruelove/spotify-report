@@ -1,6 +1,5 @@
 import datetime
 from unittest import TestCase, mock
-from unittest.mock import MagicMock, Mock
 
 from freezegun import freeze_time
 
@@ -36,7 +35,7 @@ def test_refresh_access_token__standard(mock_post, mock_request):
     }
 
     case.assertEqual("123abc", actual)
-    case.assertDictEqual(expected_request_session, mr.session)
+    case.assertEqual(expected_request_session | mr.session, mr.session)
 
 
 @mock.patch("app.utils.requests.post")

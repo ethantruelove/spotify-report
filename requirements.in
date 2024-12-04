@@ -2,6 +2,7 @@ alembic
 fastapi
 freezegun
 gunicorn
+httpx
 itsdangerous
 orjson
 psycopg2

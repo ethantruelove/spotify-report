@@ -238,6 +238,9 @@ def get_frequent(
     if media_type == MediaType.tracks:
         sub_query = (
             session.query(Track.spotify_id, func.count(Track.spotify_id).label("freq"))
+            .join(Playlist, Playlist.spotify_id == Track.playlist_id)
+            .join(UserID, UserID.user_id == Playlist.user_id)
+            .filter(UserID.user_id == user)
             .group_by(Track.spotify_id)
             .order_by(desc("freq"))
             .limit(top)
@@ -250,6 +253,9 @@ def get_frequent(
     elif media_type == MediaType.artists:
         sub_query = (
             session.query(Track.artist_id, func.count(Track.artist_id).label("freq"))
+            .join(Playlist, Playlist.spotify_id == Track.playlist_id)
+            .join(UserID, UserID.user_id == Playlist.user_id)
+            .filter(UserID.user_id == user)
             .group_by(Track.artist_id)
             .order_by(desc("freq"))
             .limit(top)
@@ -262,6 +268,9 @@ def get_frequent(
     else:
         sub_query = (
             session.query(Track.album_id, func.count(Track.album_id).label("freq"))
+            .join(Playlist, Playlist.spotify_id == Track.playlist_id)
+            .join(UserID, UserID.user_id == Playlist.user_id)
+            .filter(UserID.user_id == user)
             .group_by(Track.album_id)
             .order_by(desc("freq"))
             .limit(top)

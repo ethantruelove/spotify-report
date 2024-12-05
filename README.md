@@ -19,26 +19,30 @@ SESSION_SECRET="a super secret key"
 POSTGRES_USER=admin
 POSTGRES_PASSWORD=admin
 POSTGRES_HOST=localhost
+POSTGRES_DB=spotify
 ```
 
-## Running Inside Docker
+## Running Inside Docker (Recommended)
 
 ### Quickstart
 ```
-docker compose up -d
+docker compose up --build website
 ```
 
-### After Modifications
+### Fully reset everything with Docker
+
+Sometimes in the process of modiying the Dockerfile or needing to fully purge old Alembic files, you may need various levels of cleansing Docker cached items. If the above command isn't sufficient, use one or all of these as necessary.
 
 ```
-docker compose down -v
-docker build .
-docker compose up -d
+docker rm -f $(docker ps -a -q)
+docker volume rm $(docker volume ls -q)
+docker image rm $(docker image ls -q)
+docker builder prune --force --all
 ```
 
 ## Running Outside Docker
 
-Make sure you have a local Postgres database running
+Make sure you have a local Postgres database running (could alternatively run just the Postgres container in Docker and run the app locally, but be sure to make sure that the DB connection string does not need modifying)
 ```
 pip install requirements.txt
 alembic upgrade head
@@ -50,7 +54,28 @@ Endpoints are locally hosted at: [localhost:8080/docs](localhost:8080/docs)
 
 For OAuth flow through to Spotify, be sure to not use the Spotify page to retrieve the initial session token. Instead, visit [localhost:8080/authorize](localhost:8080/authorize) in client/browser and then Swagger endpoints *should* work as expected.
 
-# Project proposal:
+# Current functionality
+
+Note that there is a good bit of functionality that should be wrapped in a more secure pattern, but since this is running locally for now, there are less concerns
+
+### App
+- Allow user to authenticate with Spotify
+  - Saves relevant access and refresh tokens to session cookies
+- Acquires track data for a user's playlists and saves
+  - Also gets artist and album data corresponding to the tracks
+- Generates bar graph image for user's top x requested tracks, albums, or artists based on the occurrence frequency in their playlists
+- Generates a data file with all relevant information about a user's playlists
+
+### Database
+- Runs a Postgres server inside of Docker to save data to locally
+- Uses Alembic to handle database migrations
+- Uses SQLAlchemy for ORM
+
+### Testing
+- Uses pytest framework for fixtures
+- Provides comprehensive coverage overview with pytest-cov
+
+# Original project proposal
 
 ### Spotify API enhancements / maybe data visualizer:
 

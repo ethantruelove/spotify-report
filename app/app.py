@@ -1,4 +1,6 @@
+import csv
 import datetime
+import io
 import logging
 import os
 import secrets
@@ -22,7 +24,7 @@ from starlette.middleware.sessions import SessionMiddleware
 
 import app.database as db
 from app import utils
-from app.models import Album, Artist, Track
+from app.models import Album, Artist, Playlist, Track, UserID
 from app.visualizer import MediaType, freq
 
 load_dotenv()
@@ -276,6 +278,67 @@ def get_frequent(
     headers = {"Content-Disposition": 'inline; filename="out.png"'}
 
     return Response(img_buf.getvalue(), headers=headers, media_type="image/png")
+
+
+@app.get("/report")
+def get_report(request: Request, session: SessionDep, user: str = None):
+    if not user:
+        user = utils.get_user_id(
+            request=request,
+            session=session,
+            access_token=utils.get_auth(request=request),
+        )
+
+    if session.query(UserID).filter(UserID.user_id == user).first():
+        data = (
+            session.query(
+                Playlist.name,
+                Track.name,
+                Artist.name,
+                Album.name,
+                Album.release_date,
+                Playlist.spotify_id,
+                Track.spotify_id,
+                Artist.spotify_id,
+                Album.spotify_id,
+            )
+            .filter(Playlist.user_id == UserID.user_id)
+            .filter(Playlist.spotify_id == Track.playlist_id)
+            .filter(Track.album_id == Album.spotify_id)
+            .filter(Track.artist_id == Artist.spotify_id)
+        )
+    else:
+        raise HTTPException(
+            detail=f'User "{user}" not found; nothing to generate', status_code=404
+        )
+
+    columns = [
+        "playlist_name",
+        "track_name",
+        "artist_name",
+        "album_name",
+        "album_release_date",
+        "playlist_spotify_id",
+        "track_spotify_id",
+        "artist_spotify_id",
+        "album_spotify_id",
+    ]
+
+    data = [dict(zip(columns, row)) for row in data]
+
+    mem = io.StringIO()
+
+    writer = csv.DictWriter(mem, columns)
+    writer.writeheader()
+    writer.writerows(data)
+
+    mem.seek(0)
+
+    export_media_type = "text/csv"
+    export_headers = {
+        "Content-Disposition": f"attachment; filename={user}_playlists.csv"
+    }
+    return StreamingResponse(mem, headers=export_headers, media_type=export_media_type)
 
 
 @app.get("/debug")

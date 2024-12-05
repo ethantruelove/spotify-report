@@ -1,3 +1,5 @@
+import csv
+import io
 import json
 from unittest import TestCase, mock
 
@@ -136,7 +138,7 @@ def test_sync(mock_utils, test_client):
     mock_utils.sync_tracks.assert_called_once()
 
 
-def test_get_tracks_db(test_db, test_client):
+def test_get_tracks_db(test_client):
     actual = test_client.get("/getTracksFromPlaylistDB", params={"playlist_id": "123"})
 
     case.assertEqual(200, actual.status_code)
@@ -145,7 +147,7 @@ def test_get_tracks_db(test_db, test_client):
 
 @mock.patch("app.app.freq")
 @mock.patch("app.app.utils.add_or_get_user", return_value="user")
-def test_get_frequent__tracks(mock_user, mock_freq, test_db, test_client):
+def test_get_frequent__tracks(mock_user, mock_freq, test_client):
     mock_freq.return_value.getvalue.return_value = None
     actual = test_client.get(
         "/getFrequent", params={"user": "user", "media_type": "tracks"}
@@ -157,7 +159,7 @@ def test_get_frequent__tracks(mock_user, mock_freq, test_db, test_client):
 
 @mock.patch("app.app.freq")
 @mock.patch("app.app.utils.add_or_get_user", return_value="user")
-def test_get_frequent__artists(mock_user, mock_freq, test_db, test_client):
+def test_get_frequent__artists(mock_user, mock_freq, test_client):
     mock_freq.return_value.getvalue.return_value = None
     actual = test_client.get(
         "/getFrequent", params={"user": "user", "media_type": "artists"}
@@ -169,7 +171,7 @@ def test_get_frequent__artists(mock_user, mock_freq, test_db, test_client):
 
 @mock.patch("app.app.freq")
 @mock.patch("app.app.utils.add_or_get_user", return_value="user")
-def test_get_frequent__albums(mock_user, mock_freq, test_db, test_client):
+def test_get_frequent__albums(mock_user, mock_freq, test_client):
     mock_freq.return_value.getvalue.return_value = None
     actual = test_client.get(
         "/getFrequent", params={"user": "user", "media_type": "albums"}
@@ -191,6 +193,65 @@ def test_get_frequent__bad_media_type(mock_user, mock_freq, test_client):
     case.assertEqual(
         "Input should be 'tracks', 'artists' or 'albums'",
         actual.json().get("detail")[0].get("msg"),
+    )
+
+
+@mock.patch("app.app.utils.get_auth")
+@mock.patch("app.app.utils.get_user_id", return_value="user1")
+def test_get_report__no_user_provided(
+    mock_get_user, mock_get_auth, test_client, seeded_test_db
+):
+    actual = test_client.get("/report").content.decode("utf-8").splitlines()
+
+    expected = [
+        "playlist_name,track_name,artist_name,album_name,album_release_date,playlist_spotify_id,track_spotify_id,artist_spotify_id,album_spotify_id",
+        "playlist1,track1,artist1,album1,2024-12-05,playlist_id1,track_id1,artist_id1,album_id1",
+        "playlist1,track2,artist1,album1,2024-12-05,playlist_id1,track_id2,artist_id1,album_id1",
+        "playlist1,track3,artist1,album2,2024-10-01,playlist_id1,track_id3,artist_id1,album_id2",
+        "playlist2,track4,artist1,album2,2024-10-01,playlist_id2,track_id4,artist_id1,album_id2",
+        "playlist2,track5,artist2,album3,2024-12-05,playlist_id2,track_id5,artist_id2,album_id3",
+        "playlist3,track6,artist3,album5,2024-12-05,playlist_id3,track_id6,artist_id3,album_id5",
+        "playlist3,track7,artist3,album4,2024-12-05,playlist_id3,track_id7,artist_id3,album_id4",
+    ]
+
+    case.assertEqual(expected, actual)
+
+
+@mock.patch("app.app.utils.get_auth")
+@mock.patch("app.app.utils.get_user_id", return_value="user1")
+def test_get_report__user_provided(
+    mock_get_user, mock_get_auth, test_client, seeded_test_db
+):
+    actual = (
+        test_client.get("/report", params={"user": "user1"})
+        .content.decode("utf-8")
+        .splitlines()
+    )
+
+    expected = [
+        "playlist_name,track_name,artist_name,album_name,album_release_date,playlist_spotify_id,track_spotify_id,artist_spotify_id,album_spotify_id",
+        "playlist1,track1,artist1,album1,2024-12-05,playlist_id1,track_id1,artist_id1,album_id1",
+        "playlist1,track2,artist1,album1,2024-12-05,playlist_id1,track_id2,artist_id1,album_id1",
+        "playlist1,track3,artist1,album2,2024-10-01,playlist_id1,track_id3,artist_id1,album_id2",
+        "playlist2,track4,artist1,album2,2024-10-01,playlist_id2,track_id4,artist_id1,album_id2",
+        "playlist2,track5,artist2,album3,2024-12-05,playlist_id2,track_id5,artist_id2,album_id3",
+        "playlist3,track6,artist3,album5,2024-12-05,playlist_id3,track_id6,artist_id3,album_id5",
+        "playlist3,track7,artist3,album4,2024-12-05,playlist_id3,track_id7,artist_id3,album_id4",
+    ]
+
+    case.assertEqual(expected, actual)
+
+
+@mock.patch("app.app.utils.get_auth")
+@mock.patch("app.app.utils.get_user_id", return_value="user1")
+def test_get_report__user_not_found(
+    mock_get_user, mock_get_auth, test_client, seeded_test_db
+):
+    actual = test_client.get("/report", params={"user": "not user"})
+
+    case.assertEqual(404, actual.status_code)
+    case.assertEqual(
+        {"detail": 'User "not user" not found; nothing to generate'}, actual.json()
     )
 
 
@@ -216,3 +277,11 @@ def test_debug(mr, mock_time, test_client):
 
     case.assertEqual(200, actual.status_code)
     case.assertEqual(expected, actual.json())
+
+
+from sqlalchemy import inspect
+
+
+def test_tables_exist(test_db):
+    inspector = inspect(test_db.get_bind())
+    assert "user_id" in inspector.get_table_names()

@@ -495,67 +495,37 @@ def test_sync_tracks__playlists_and_tracks(
     case.assertEqual([], test_db.query(Track).all())
 
 
-def test_clean_tables(test_db):
-    not_user_playlist = Playlist(
-        spotify_id="321cba", user_id="not user", name="playlist1"
-    )
-    not_user_track = Track(
-        id="3",
-        spotify_id="345",
-        playlist_id="321cba",
-        album_id="678",
-        artist_id="456",
-        name="track2",
-    )
+def test_clean_tables(seeded_test_db):
+    utils.clean_tables(session=seeded_test_db, user="user1")
 
-    test_db.add_all([UserID(user_id="user"), UserID(user_id="not user")])
-    test_db.add_all(
+    case.assertIn(UserID(user_id="user1"), seeded_test_db.query(UserID).all())
+    case.assertEqual(
         [
-            Playlist(spotify_id="123abc", user_id="user", name="playlist1"),
-            not_user_playlist,
-        ]
+            Playlist(spotify_id="playlist_id3", user_id="user2", name="playlist3"),
+        ],
+        seeded_test_db.query(Playlist).all(),
     )
-    test_db.add(Artist(spotify_id="456", name="artist1"))
-    test_db.flush()
-    test_db.add(
-        Album(
-            spotify_id="678",
-            artist_id="456",
-            name="album1",
-            release_date=datetime.date(2024, 12, 3),
-        )
-    )
-    test_db.add_all(
+    case.assertEqual(
         [
             Track(
-                id="1",
-                spotify_id="abc123",
-                playlist_id="123abc",
-                album_id="678",
-                artist_id="456",
-                name="track1",
+                id=6,
+                spotify_id="track_id6",
+                playlist_id="playlist_id3",
+                artist_id="artist_id3",
+                album_id="album_id5",
+                name="track6",
             ),
             Track(
-                id="2",
-                spotify_id="cba123",
-                playlist_id="123abc",
-                album_id="678",
-                artist_id="456",
-                name="track2",
+                id=7,
+                spotify_id="track_id7",
+                playlist_id="playlist_id3",
+                artist_id="artist_id3",
+                album_id="album_id4",
+                name="track7",
             ),
-            not_user_track,
-        ]
+        ],
+        seeded_test_db.query(Track).all(),
     )
-    test_db.commit()
-
-    case.assertIsNotNone(test_db.query(Playlist).all())
-    case.assertIsNotNone(test_db.query(Track).all())
-
-    utils.clean_tables(session=test_db, user="user")
-    test_db.commit()
-
-    case.assertEqual([not_user_playlist], test_db.query(Playlist).all())
-    case.assertEqual([not_user_track], test_db.query(Track).all())
 
 
 @mock.patch("app.utils.get_auth")

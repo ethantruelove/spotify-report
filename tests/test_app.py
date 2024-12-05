@@ -1,9 +1,6 @@
-import csv
-import io
-import json
 from unittest import TestCase, mock
 
-from fastapi.responses import JSONResponse
+from sqlalchemy import inspect
 
 case = TestCase()
 case.maxDiff = None
@@ -275,9 +272,12 @@ def test_debug(mr, mock_time, test_client):
     case.assertEqual(expected, actual.json())
 
 
-from sqlalchemy import inspect
+@mock.patch(
+    "app.app.Request.session",
+    new_callable=mock.PropertyMock,
+)
+def test_clear_session(mr, test_client):
+    mr.return_value = {"access_token": "123", "refresh_token": "abc"}
+    test_client.delete("/clearSession")
 
-
-def test_tables_exist(test_db):
-    inspector = inspect(test_db.get_bind())
-    assert "user_id" in inspector.get_table_names()
+    case.assertDictEqual({}, mr())

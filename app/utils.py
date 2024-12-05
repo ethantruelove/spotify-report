@@ -398,6 +398,7 @@ def add_or_get_user(request: Request, session: SessionDep, user: str = None) -> 
         )
 
     user_id = session.query(UserID).filter_by(user_id=user).first()
+
     if not user_id:
         user_id = UserID(user_id=user)
         session.add(user_id)

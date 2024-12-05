@@ -302,7 +302,7 @@ def get_report(request: Request, session: SessionDep, user: str = None):
                 Artist.spotify_id,
                 Album.spotify_id,
             )
-            .filter(Playlist.user_id == UserID.user_id)
+            .filter(Playlist.user_id == user)
             .filter(Playlist.spotify_id == Track.playlist_id)
             .filter(Track.album_id == Album.spotify_id)
             .filter(Track.artist_id == Artist.spotify_id)

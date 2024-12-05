@@ -1,7 +1,7 @@
 import os
 
 from dotenv import load_dotenv
-from sqlalchemy import create_engine
+from sqlalchemy import Engine, create_engine
 from sqlalchemy.orm import scoped_session, sessionmaker
 
 load_dotenv()
@@ -12,7 +12,13 @@ POSTGRES_PORT = os.getenv("POSTGRES_PORT", 5432)
 POSTGRES_DB = os.getenv("POSTGRES_DB", "spotify")
 
 
-def get_engine():
+def get_engine() -> Engine:
+    """
+    Create an engine for SQLAlchemy
+
+    Returns:
+        Engine: The DB engine
+    """
     engine = create_engine(
         f"postgresql+psycopg2://{POSTGRES_USER}:{POSTGRES_PASSWORD}@{POSTGRES_HOST}:{POSTGRES_PORT}/{POSTGRES_DB}"
     )
@@ -21,6 +27,12 @@ def get_engine():
 
 
 def get_db():
+    """
+    Get the database session object
+
+    Yields:
+        Session: Get the DB session
+    """
     engine = get_engine()
     db = scoped_session(sessionmaker(bind=engine, autoflush=True))
 

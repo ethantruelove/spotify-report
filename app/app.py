@@ -373,6 +373,11 @@ def debug(request: Request) -> dict:
     }
 
 
+@app.delete("/clearSession")
+def clear_session(request: Request) -> None:
+    request.session.clear()
+
+
 @app.exception_handler(HTTPException)
 def http_exception_handler(request: Request, exception: HTTPException) -> JSONResponse:
     """

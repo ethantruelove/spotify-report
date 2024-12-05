@@ -6,6 +6,7 @@ Reporting on what you think you already know about your music habits
 ## Connecting to Spotify API
 
 - Create a project at https://developer.spotify.com/dashboard
+  - Set redirect URI/callback to: http://localhost:8080/callback/
 
 ## Environment variables
 
@@ -22,7 +23,7 @@ POSTGRES_HOST=localhost
 POSTGRES_DB=spotify
 ```
 
-## Running Inside Docker (Recommended)
+## Running inside Docker (Recommended)
 
 ### Quickstart
 ```
@@ -40,7 +41,7 @@ docker image rm $(docker image ls -q)
 docker builder prune --force --all
 ```
 
-## Running Outside Docker
+## Running outside Docker
 
 Make sure you have a local Postgres database running (could alternatively run just the Postgres container in Docker and run the app locally, but be sure to make sure that the DB connection string does not need modifying)
 ```
@@ -75,7 +76,12 @@ Note that there is a good bit of functionality that should be wrapped in a more 
 - Uses pytest framework for fixtures
 - Provides comprehensive coverage overview with pytest-cov
 
-# Original project proposal
+### Limitations/enhancement possibilities
+- If you login somewhere else like a private browser, the access token may be revoked. To fix, run the clear session endpoint (and maybe logout of Spotify as well if that still does not resolve)
+- Tests are a bit flaky on some of the endpoints, specifically the frequency image generator as it doesn't return data readily available to test
+- The /authorize endpoint must be hit directly and not via the Swagger page (http://localhost:8080/authorize)
+
+# Original roject proposal
 
 ### Spotify API enhancements / maybe data visualizer:
 

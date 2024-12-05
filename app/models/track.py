@@ -26,7 +26,7 @@ class Track(Base):
     album_id: Mapped[str] = mapped_column(
         ForeignKey("album.spotify_id", ondelete="SET NULL"), nullable=True
     )
-    name: Mapped[str] = mapped_column(String(200))
+    name: Mapped[str] = mapped_column(String(250))
 
     playlist: Mapped["Playlist"] = relationship(back_populates="track")
 

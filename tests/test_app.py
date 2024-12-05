@@ -210,8 +210,6 @@ def test_get_report__no_user_provided(
         "playlist1,track3,artist1,album2,2024-10-01,playlist_id1,track_id3,artist_id1,album_id2",
         "playlist2,track4,artist1,album2,2024-10-01,playlist_id2,track_id4,artist_id1,album_id2",
         "playlist2,track5,artist2,album3,2024-12-05,playlist_id2,track_id5,artist_id2,album_id3",
-        "playlist3,track6,artist3,album5,2024-12-05,playlist_id3,track_id6,artist_id3,album_id5",
-        "playlist3,track7,artist3,album4,2024-12-05,playlist_id3,track_id7,artist_id3,album_id4",
     ]
 
     case.assertEqual(expected, actual)
@@ -235,8 +233,6 @@ def test_get_report__user_provided(
         "playlist1,track3,artist1,album2,2024-10-01,playlist_id1,track_id3,artist_id1,album_id2",
         "playlist2,track4,artist1,album2,2024-10-01,playlist_id2,track_id4,artist_id1,album_id2",
         "playlist2,track5,artist2,album3,2024-12-05,playlist_id2,track_id5,artist_id2,album_id3",
-        "playlist3,track6,artist3,album5,2024-12-05,playlist_id3,track_id6,artist_id3,album_id5",
-        "playlist3,track7,artist3,album4,2024-12-05,playlist_id3,track_id7,artist_id3,album_id4",
     ]
 
     case.assertEqual(expected, actual)

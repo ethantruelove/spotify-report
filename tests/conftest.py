@@ -40,11 +40,6 @@ def test_client():
     return TestClient(app.app)
 
 
-@pytest.fixture(scope="session")
-def test_client_sesssion():
-    return TestClient(app.app)
-
-
 @pytest.fixture()
 def mock_request():
     def real_mock_request(

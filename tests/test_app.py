@@ -1,17 +1,19 @@
 import json
 from unittest import TestCase, mock
 
+from fastapi.responses import JSONResponse
+
 case = TestCase()
 case.maxDiff = None
 
 
 @mock.patch("app.app.requests.post")
 def test_get_access_token(mock_post, test_client):
-    mock_post.return_value.json.return_value = json.dumps({"data": "value"})
+    mock_post.return_value.json.return_value = {"data": "value"}
     actual = test_client.get("/getAccessToken", params={"code": "123"})
 
     case.assertEqual(200, actual.status_code)
-    case.assertEqual(json.dumps({"data": "value"}), actual.json())
+    case.assertDictEqual({"data": "value"}, actual.json())
 
     actual_data = mock_post.call_args.kwargs.get("data")
 

@@ -126,12 +126,7 @@ def get_user_id(request: Request, session: SessionDep, access_token: str = None)
         headers={"Authorization": f"Bearer {access_token}"},
     ).json()
 
-    if user_id := res.get("id"):
-        if not session.query(UserID).filter_by(user_id=user_id).first():
-            session.add(UserID(user_id=user_id))
-            session.commit()
-
-        return user_id
+    return res.get("id")
 
 
 def get_playlists_wrapper(access_token: str, user: str) -> List[Playlist]:

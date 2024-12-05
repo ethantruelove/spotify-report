@@ -66,7 +66,6 @@ def get_access_token(code: str) -> dict:
         data=data,
         headers=headers,
     )
-
     return res.json()
 
 
@@ -166,7 +165,7 @@ def sync(request: Request, session: SessionDep, user: str = None) -> HTMLRespons
 
     Args:
         request (Request): Current request
-        session (SessionDep): Current
+        session (SessionDep): Current session
         user (str, optional): Provided user. Defaults to None. If not provided, it will be looked up via Spotify
 
     Returns:
@@ -293,7 +292,7 @@ def debug(request: Request) -> dict:
     return {
         "access_token": request.session.get("access_token"),
         "refresh_token": request.session.get("refresh_token"),
-        "expiration_time": datetime.fromtimestamp(
+        "expiration_time": datetime.datetime.fromtimestamp(
             int(expiration_time[: expiration_time.index(".")])
         ),
         "expired": float(request.session.get("expiration_time")) < time.time(),
@@ -301,11 +300,12 @@ def debug(request: Request) -> dict:
 
 
 @app.exception_handler(HTTPException)
-def http_exception_handler(exception: HTTPException) -> JSONResponse:
+def http_exception_handler(request: Request, exception: HTTPException) -> JSONResponse:
     """
     A helper handler to handle various status code exception differently if more data is needed.
-
+\
     Args:
+        request (Request): Current request
         exception (HTTPException): Raised exception
 
     Returns:

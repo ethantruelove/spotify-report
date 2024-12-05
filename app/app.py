@@ -1,3 +1,4 @@
+import datetime
 import logging
 import os
 import secrets
@@ -206,9 +207,7 @@ def get_frequent(
 
 
 @app.get("/debug")
-def debug(request: Request):
-    from datetime import datetime
-
+def debug(request: Request) -> dict:
     expiration_time = str(request.session.get("expiration_time"))
 
     return {
@@ -222,5 +221,5 @@ def debug(request: Request):
 
 
 @app.exception_handler(HTTPException)
-def http_exception_handler(request: Request, exception: HTTPException):
+def http_exception_handler(exception: HTTPException) -> JSONResponse:
     return JSONResponse({"detail": exception.detail}, status_code=exception.status_code)

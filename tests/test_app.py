@@ -207,7 +207,6 @@ def test_debug(mr, mock_time, test_client):
 
     import time
 
-    print(time.time())
     expected = {
         "access_token": "123",
         "refresh_token": "321",

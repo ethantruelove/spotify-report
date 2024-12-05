@@ -1,11 +1,9 @@
-import base64
 import datetime
 import logging
 import os
 import time
 from typing import Annotated, List
 
-import itsdangerous
 import requests
 from dotenv import load_dotenv
 from fastapi import Depends, Request
@@ -193,8 +191,6 @@ def sync_albums(session: SessionDep, albums: List[dict]):
             seen_albums.add(album_id)
             cleaned_albums.append(clean_album(album))
 
-    print(cleaned_albums)
-    print(bool(cleaned_albums))
     if cleaned_albums:
         stmt = pginsert(Album).values(cleaned_albums).on_conflict_do_nothing()
         session.execute(stmt)

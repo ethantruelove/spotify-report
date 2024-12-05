@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Self
 
 from pydantic import BaseModel
 from sqlalchemy import ForeignKey, String
@@ -23,6 +23,23 @@ class Playlist(Base):
     track: Mapped["Track"] = relationship(
         back_populates="playlist", cascade="all, delete-orphan"
     )
+
+    def to_dict(self):
+        return {
+            "spotify_id": self.spotify_id,
+            "user_id": self.user_id,
+            "name": self.name,
+        }
+
+    def __repr__(self):
+        return f"<Playlist spotify_id={self.spotify_id} user_id={self.user_id} name={self.name}>"
+
+    def __eq__(self, playlist: Self):
+        return (
+            self.spotify_id == playlist.spotify_id
+            and self.user_id == playlist.user_id
+            and self.name == playlist.name
+        )
 
 
 class PlaylistSchema(BaseModel):

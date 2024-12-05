@@ -28,11 +28,17 @@ services:
         source: ./app/
         target: /opt/app/
       - type: bind
+        source: ./tests/
+        target: /opt/tests/
+      - type: bind
         source: ./alembic/
         target: /opt/alembic/
       - type: bind
         source: ./alembic.ini
         target: /opt/alembic.ini
+      - type: bind
+        source: ./.coveragerc
+        target: /opt/.coveragerc
 
   database:
     image: postgres:latest

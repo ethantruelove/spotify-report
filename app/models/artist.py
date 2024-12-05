@@ -1,3 +1,5 @@
+from typing import Self
+
 from pydantic import BaseModel
 from sqlalchemy import String
 from sqlalchemy.orm import Mapped, mapped_column
@@ -19,6 +21,9 @@ class Artist(Base):
 
     def __repr__(self):
         return f"<Artist spotify_id={self.spotify_id} name={self.name}>"
+
+    def __eq__(self, artist: Self):
+        return self.spotify_id == artist.spotify_id and self.name == artist.name
 
 
 class ArtistSchema(BaseModel):

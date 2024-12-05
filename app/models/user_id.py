@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Self
 
 from pydantic import BaseModel
 from sqlalchemy import String
@@ -21,6 +21,15 @@ class UserID(Base):
         cascade="all, delete-orphan",
         passive_deletes=True,
     )
+
+    def to_dict(self):
+        return {"user_id": self.user_id}
+
+    def __repr__(self):
+        return f"<UserID user_id={self.user_id}>"
+
+    def __eq__(self, user: Self):
+        return self.user_id == user.user_id
 
 
 class UserIDSchema(BaseModel):

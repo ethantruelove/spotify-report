@@ -1,9 +1,13 @@
 alembic
 fastapi
+freezegun
 gunicorn
+httpx
 itsdangerous
 orjson
 psycopg2
+pytest
+pytest-cov
 matplotlib
 requests
 sqlalchemy

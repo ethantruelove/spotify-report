@@ -2,7 +2,6 @@ import io
 from enum import Enum
 from typing import List
 
-import numpy as np
 from matplotlib import pyplot as plt
 
 

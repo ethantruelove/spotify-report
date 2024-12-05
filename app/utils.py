@@ -1,11 +1,9 @@
-import base64
 import datetime
 import logging
 import os
 import time
 from typing import Annotated, List
 
-import itsdangerous
 import requests
 from dotenv import load_dotenv
 from fastapi import Depends, Request
@@ -29,7 +27,21 @@ SessionDep = Annotated[Session, Depends(db.get_db)]
 def refresh_access_token(
     request: Request,
     refresh_token: str = None,
-):
+) -> str:
+    """
+    Try to get the refresh access token from the cached session cookie and renew with Spotify.
+
+    Args:
+        request (Request): Current request
+        refresh_token (str, optional): The refresh token to use. Defaults to None.
+            Will try to pull from cookies if not provided
+
+    Raises:
+        ValueError: If not provided and not in cookies, error as impossible to refresh
+
+    Returns:
+        str: The refresh token
+    """
     if not refresh_token and not (
         refresh_token := request.session.get("refresh_token")
     ):
@@ -62,7 +74,22 @@ def refresh_access_token(
         return access_token
 
 
-def get_auth(request: Request):
+def get_auth(request: Request) -> str:
+    """
+    Gets the necessary access token to use for Spotify API calls.
+        Will use cached access token if unexpired
+        Will attempt to use refresh token to get new access token if expired
+        Will finally error if options exhausted (could look into redirecting to /authorize)
+
+    Args:
+        request (Request): Current request
+
+    Raises:
+        ValueError: Error if all sources exhausted
+
+    Returns:
+        str: The access token
+    """
     if expiration_time := request.session.get("expiration_time"):
         if expiration_time > time.time():
             if access_token := request.session.get("access_token"):
@@ -79,7 +106,18 @@ def get_auth(request: Request):
     raise ValueError("Please call /authorize to generate new tokens")
 
 
-def get_user_id(request: Request, session: SessionDep, access_token: str = None):
+def get_user_id(request: Request, session: SessionDep, access_token: str = None) -> str:
+    """
+    Wrapper to get the user name from Spotify.
+
+    Args:
+        request (Request): Current request
+        session (SessionDep): Current session
+        access_token (str, optional): The access token to use to get current user. Defaults to None.
+
+    Returns:
+        str: The user id for the current authenticated user
+    """
     if not access_token:
         access_token = get_auth(request=request)
 
@@ -88,15 +126,21 @@ def get_user_id(request: Request, session: SessionDep, access_token: str = None)
         headers={"Authorization": f"Bearer {access_token}"},
     ).json()
 
-    if user_id := res.get("id"):
-        if not session.query(UserID).filter_by(user_id=user_id).first():
-            session.add(UserID(user_id=user_id))
-            session.commit()
-
-        return user_id
+    return res.get("id")
 
 
-def get_playlists_wrapper(access_token: str, user: str):
+def get_playlists_wrapper(access_token: str, user: str) -> List[Playlist]:
+    """
+    Wrapper to get playlists for a user from Spotify.
+    Note that playlists will be public only if not the currently authenticated user.
+
+    Args:
+        access_token (str): Access token to use
+        user (str): User to get playlists for
+
+    Returns:
+        List[Playlist]: List of playlists found
+    """
     res = requests.get(
         url=f"https://api.spotify.com/v1/users/{user}/playlists",
         headers={"Authorization": f"Bearer {access_token}"},
@@ -116,7 +160,15 @@ def get_playlists_wrapper(access_token: str, user: str):
     return [p for p in playlists if p is not None] if playlists is not None else []
 
 
-def sync_playlists(request: Request, session: SessionDep, user: str):
+def sync_playlists(request: Request, session: SessionDep, user: str) -> None:
+    """
+    Sync the acquired playlists with the database.
+
+    Args:
+        request (Request): Current request
+        session (SessionDep): Current session
+        user (str): The user to sync
+    """
     log.info("Starting playlist sync")
     if raw_playlists := get_playlists_wrapper(
         access_token=get_auth(request=request),
@@ -136,7 +188,17 @@ def sync_playlists(request: Request, session: SessionDep, user: str):
         session.flush()
 
 
-def get_tracks_wrapper(access_token: str, playlist_id: str):
+def get_tracks_wrapper(access_token: str, playlist_id: str) -> List[Track]:
+    """
+    Wrapper for getting tracks from Spotify for a given playlist
+
+    Args:
+        access_token (str): Access token to use for authentication
+        playlist_id (str): Spotify's playlist ID to get tracks for
+
+    Returns:
+        List[Track]: List of tracks found in the playlist
+    """
     res = requests.get(
         url=f"https://api.spotify.com/v1/playlists/{playlist_id}/tracks",
         headers={"Authorization": f"Bearer {access_token}"},
@@ -157,7 +219,16 @@ def get_tracks_wrapper(access_token: str, playlist_id: str):
     return [t for t in tracks if t is not None] if tracks is not None else []
 
 
-def clean_album(album: dict):
+def clean_album(album: dict) -> dict:
+    """
+    Clean a provided album by formatting the release date as a date object and renaming keys appropriately.
+
+    Args:
+        album (dict): Spotify's raw provided album dict information
+
+    Returns:
+        dict: Cleaned dictionary ready to be converted to Album object
+    """
     precision = album.get("release_date_precision")
     if release_date_str := album.get("release_date"):
         if precision == "day":
@@ -182,7 +253,16 @@ def clean_album(album: dict):
     }
 
 
-def sync_albums(session: SessionDep, albums: List[dict]):
+def sync_albums(session: SessionDep, albums: List[dict]) -> None:
+    """
+    Sync the albums with the database.
+    This will clean albums and deduplicate the list before committing to DB in one transaction,
+    ignoring albums that are already present in the DB.
+
+    Args:
+        session (SessionDep): Current session
+        albums (List[dict]): Raw albums from Spotify to clean and sync
+    """
     seen_albums = set()
     cleaned_albums = []
     for album in albums:
@@ -193,15 +273,22 @@ def sync_albums(session: SessionDep, albums: List[dict]):
             seen_albums.add(album_id)
             cleaned_albums.append(clean_album(album))
 
-    print(cleaned_albums)
-    print(bool(cleaned_albums))
     if cleaned_albums:
         stmt = pginsert(Album).values(cleaned_albums).on_conflict_do_nothing()
         session.execute(stmt)
         session.flush()
 
 
-def sync_artists(session: SessionDep, artists: List[dict]):
+def sync_artists(session: SessionDep, artists: List[dict]) -> None:
+    """
+    Sync the artists with the database.
+    This will deduplicate the list before committing to DB in one transaction,
+    ignoring artists that are already present in the DB.
+
+    Args:
+        session (SessionDep): Current session
+        artists (List[dict]): Raw artists from Spotify
+    """
     seen_artists = set()
     deduped_artists = []
     for artist in artists:
@@ -218,7 +305,16 @@ def sync_artists(session: SessionDep, artists: List[dict]):
         session.flush()
 
 
-def sync_tracks(request: Request, session: SessionDep, user: str = None):
+def sync_tracks(request: Request, session: SessionDep, user: str = None) -> None:
+    """
+    Sync the tracks with the DB for a provided user
+
+    Args:
+        request (Request): Current request
+        session (SessionDep): Current session
+        user (str, optional): User to sync tracks for. Defaults to None.
+            User will be currently authenticated user if not provided.
+    """
     log.info("Starting tracks sync")
     artists = []
     albums = []
@@ -262,13 +358,33 @@ def sync_tracks(request: Request, session: SessionDep, user: str = None):
     session.commit()
 
 
-def clean_tables(session: SessionDep, user: str):
+def clean_tables(session: SessionDep, user: str) -> None:
+    """
+    Delete all the playlists for a current user.
+    Since the application has no concept of its own user, we must do everything based on a Spotify username,
+    and our definition of sync is to delete all existing playlists made by a user and then reacquire the current set.
+
+    Args:
+        session (SessionDep): Current session
+        user (str): The user to delete playlists for
+    """
     log.info("Cleaning tables")
     session.query(Playlist).filter_by(user_id=user).delete()
     session.flush()
 
 
-def add_or_get_user(request: Request, session: SessionDep, user: str = None):
+def add_or_get_user(request: Request, session: SessionDep, user: str = None) -> str:
+    """
+    Add the requested user ID to DB if not present and return the object.
+
+    Args:
+        request (Request): Current request
+        session (SessionDep): Current session
+        user (str, optional): The user to add or get. Defaults to None.
+
+    Returns:
+        str: User ID for the requested user
+    """
     log.info("Getting user")
     if not user:
         user = get_user_id(

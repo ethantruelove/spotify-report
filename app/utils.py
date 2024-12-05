@@ -369,7 +369,13 @@ def clean_tables(session: SessionDep, user: str) -> None:
         user (str): The user to delete playlists for
     """
     log.info("Cleaning tables")
-    session.query(Playlist).filter_by(user_id=user).delete()
+    # TODO: See why the cascade delete relationships are not mapping in memory test db
+    playlists = session.query(Playlist).filter_by(user_id=user).all()
+
+    for playlist in playlists:
+        session.query(Track).filter(Track.playlist_id == playlist.spotify_id).delete()
+        session.delete(playlist)
+
     session.flush()
 
 

@@ -308,7 +308,9 @@ def get_report(request: Request, session: SessionDep, user: str = None):
             .filter(Track.artist_id == Artist.spotify_id)
         )
     else:
-        data = []
+        raise HTTPException(
+            detail=f'User "{user}" not found; nothing to generate', status_code=404
+        )
 
     columns = [
         "playlist_name",

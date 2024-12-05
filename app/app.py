@@ -6,6 +6,7 @@ import time
 from typing import Annotated, Optional
 
 import orjson
+import pytz
 import requests
 from dotenv import load_dotenv
 from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Request, Response
@@ -34,6 +35,7 @@ app = FastAPI()
 app.add_middleware(SessionMiddleware, secret_key=SESSION_SECRET)
 
 log = logging.getLogger("uvicorn.error")
+tz = pytz.timezone("America/Chicago")
 
 SessionDep = Annotated[Session, Depends(db.get_db)]
 
@@ -293,7 +295,7 @@ def debug(request: Request) -> dict:
         "access_token": request.session.get("access_token"),
         "refresh_token": request.session.get("refresh_token"),
         "expiration_time": datetime.datetime.fromtimestamp(
-            int(expiration_time[: expiration_time.index(".")])
+            int(expiration_time[: expiration_time.index(".")]), tz=tz
         ),
         "expired": float(request.session.get("expiration_time")) < time.time(),
     }

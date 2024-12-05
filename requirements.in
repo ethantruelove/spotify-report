@@ -8,6 +8,7 @@ orjson
 psycopg2
 pytest
 pytest-cov
+pytz
 matplotlib
 requests
 sqlalchemy

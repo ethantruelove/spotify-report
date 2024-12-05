@@ -98,6 +98,8 @@ python-dateutil==2.9.0.post0
     #   matplotlib
 python-dotenv==1.0.1
     # via uvicorn
+pytz==2024.2
+    # via -r requirements.in
 pyyaml==6.0.2
     # via uvicorn
 requests==2.32.3

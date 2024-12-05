@@ -207,12 +207,10 @@ def test_debug(mr, mock_time, test_client):
     }
     actual = test_client.get("/debug")
 
-    import time
-
     expected = {
         "access_token": "123",
         "refresh_token": "321",
-        "expiration_time": "2024-12-02T07:01:40",
+        "expiration_time": "2024-12-02T07:01:40-06:00",
         "expired": False,
     }
 
